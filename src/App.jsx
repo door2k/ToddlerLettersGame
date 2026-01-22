@@ -197,13 +197,20 @@ function App() {
     const digit = digitsRef.current[currentIndexRef.current]
     const validAnswers = numberWords[digit] || []
 
+    console.log('Speech check:', { raw: spokenText, cleaned: text, digit, validAnswers })
+
     // Check each word in the transcript
     const words = text.split(/\s+/)
     for (const word of words) {
-      if (validAnswers.includes(word)) return true
+      if (validAnswers.includes(word)) {
+        console.log('MATCH found:', word)
+        return true
+      }
     }
     // Also check full cleaned transcript
-    return validAnswers.includes(text)
+    const fullMatch = validAnswers.includes(text)
+    console.log('Full match:', fullMatch)
+    return fullMatch
   }, [])
 
   // Start listening for speech
@@ -242,6 +249,8 @@ function App() {
 
       const currentTranscript = finalTranscript || interimTranscript
       setTranscript(currentTranscript)
+
+      console.log('Recognition result:', { final: finalTranscript, interim: interimTranscript, isFinal: !!finalTranscript })
 
       if (finalTranscript && checkAnswer(finalTranscript)) {
         handledRef.current = true
