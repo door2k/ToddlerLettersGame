@@ -50,18 +50,14 @@ function randomItem(arr) {
 // Speak text using Web Speech API
 function speak(text, onEnd = null) {
   if ('speechSynthesis' in window) {
-    // Cancel any ongoing speech
     window.speechSynthesis.cancel()
-
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.rate = 0.9
     utterance.pitch = 1.1
     utterance.volume = 1
-
     if (onEnd) {
       utterance.onend = onEnd
     }
-
     window.speechSynthesis.speak(utterance)
   }
 }
@@ -69,17 +65,10 @@ function speak(text, onEnd = null) {
 // Fire confetti celebration
 function celebrate() {
   const count = 200
-  const defaults = {
-    origin: { y: 0.7 },
-    zIndex: 1000,
-  }
+  const defaults = { origin: { y: 0.7 }, zIndex: 1000 }
 
   function fire(particleRatio, opts) {
-    confetti({
-      ...defaults,
-      ...opts,
-      particleCount: Math.floor(count * particleRatio),
-    })
+    confetti({ ...defaults, ...opts, particleCount: Math.floor(count * particleRatio) })
   }
 
   fire(0.25, { spread: 26, startVelocity: 55 })
@@ -113,48 +102,106 @@ function App() {
   const timeoutRef = useRef(null)
   const handledRef = useRef(false)
 
+  // Use refs to store current values for use in callbacks
+  const currentIndexRef = useRef(currentIndex)
+  const attemptsRef = useRef(attempts)
+  const scoreRef = useRef(score)
+  const digitsRef = useRef(digits)
+
+  // Keep refs in sync
+  useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
+  useEffect(() => { attemptsRef.current = attempts }, [attempts])
+  useEffect(() => { scoreRef.current = score }, [score])
+  useEffect(() => { digitsRef.current = digits }, [digits])
+
   const currentDigit = digits[currentIndex]
   const maxAttempts = 3
   const totalItems = 10
 
   // Initialize game
   useEffect(() => {
-    // Check for speech recognition support
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) {
       setSpeechSupported(false)
       return
     }
-
-    // Initialize digits
     const allDigits = shuffle(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
     setDigits(allDigits)
 
     return () => {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort()
-      }
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-      }
+      if (recognitionRef.current) recognitionRef.current.abort()
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [])
+
+  // Move to next digit
+  const moveToNext = useCallback(() => {
+    setTranscript('')
+    setAttempts(0)
+
+    if (currentIndexRef.current >= totalItems - 1) {
+      setGameState(STATES.COMPLETE)
+      celebrate()
+      speak(`Amazing! You got ${scoreRef.current} out of ${totalItems}! Great job!`)
+    } else {
+      setCurrentIndex(i => i + 1)
+      setGameState(STATES.READY)
+    }
+  }, [])
+
+  // Handle correct answer
+  const handleCorrect = useCallback(() => {
+    setGameState(STATES.CORRECT)
+    setScore(s => s + 1)
+    celebrate()
+
+    const digit = digitsRef.current[currentIndexRef.current]
+    const celebrationText = randomItem(celebrations)
+    speak(`${celebrationText} That's ${digit}!`, () => {
+      timeoutRef.current = setTimeout(() => {
+        moveToNext()
+      }, 1500)
+    })
+  }, [moveToNext])
+
+  // Handle wrong answer
+  const handleWrong = useCallback(() => {
+    setGameState(STATES.WRONG)
+    const encouragement = randomItem(encouragements)
+    speak(encouragement, () => {
+      timeoutRef.current = setTimeout(() => {
+        setGameState(STATES.READY)
+      }, 500)
+    })
+  }, [])
+
+  // Handle reveal after max attempts
+  const handleReveal = useCallback(() => {
+    setGameState(STATES.REVEAL)
+    const digit = digitsRef.current[currentIndexRef.current]
+    speak(`This is ${digit}! ${digit}! Can you say ${digit}?`, () => {
+      timeoutRef.current = setTimeout(() => {
+        speak("Wonderful! Let's try another one!", () => {
+          timeoutRef.current = setTimeout(() => {
+            moveToNext()
+          }, 1000)
+        })
+      }, 2000)
+    })
+  }, [moveToNext])
 
   // Check if transcript matches current digit
   const checkAnswer = useCallback((spokenText) => {
     const text = spokenText.toLowerCase().trim()
-    const validAnswers = numberWords[currentDigit] || []
+    const digit = digitsRef.current[currentIndexRef.current]
+    const validAnswers = numberWords[digit] || []
 
-    // Check if any word in the transcript matches
     const words = text.split(/\s+/)
     for (const word of words) {
-      if (validAnswers.includes(word)) {
-        return true
-      }
+      if (validAnswers.includes(word)) return true
     }
-    // Also check full transcript
     return validAnswers.includes(text)
-  }, [currentDigit])
+  }, [])
 
   // Start listening for speech
   const startListening = useCallback(() => {
@@ -163,10 +210,7 @@ function App() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) return
 
-    // Clean up previous instance
-    if (recognitionRef.current) {
-      recognitionRef.current.abort()
-    }
+    if (recognitionRef.current) recognitionRef.current.abort()
 
     const recognition = new SpeechRecognition()
     recognition.continuous = false
@@ -198,9 +242,7 @@ function App() {
 
       if (finalTranscript && checkAnswer(finalTranscript)) {
         handledRef.current = true
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current)
-        }
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
         recognition.abort()
         handleCorrect()
       }
@@ -215,8 +257,7 @@ function App() {
 
     recognition.onend = () => {
       if (!handledRef.current) {
-        // Recognition ended without a correct answer
-        const newAttempts = attempts + 1
+        const newAttempts = attemptsRef.current + 1
         setAttempts(newAttempts)
 
         if (newAttempts >= maxAttempts) {
@@ -235,68 +276,10 @@ function App() {
       console.log('Recognition start error:', e)
     }
 
-    // Stop listening after 4 seconds
     timeoutRef.current = setTimeout(() => {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop()
-      }
+      if (recognitionRef.current) recognitionRef.current.stop()
     }, 4000)
-  }, [speechSupported, attempts, checkAnswer, handleCorrect, handleWrong, handleReveal])
-
-  // Handle correct answer
-  const handleCorrect = useCallback(() => {
-    setGameState(STATES.CORRECT)
-    setScore(s => s + 1)
-    celebrate()
-
-    const celebrationText = randomItem(celebrations)
-    speak(`${celebrationText} That's ${currentDigit}!`, () => {
-      // Move to next after celebration
-      timeoutRef.current = setTimeout(() => {
-        moveToNext()
-      }, 1500)
-    })
-  }, [currentDigit])
-
-  // Handle wrong answer
-  const handleWrong = useCallback(() => {
-    setGameState(STATES.WRONG)
-    const encouragement = randomItem(encouragements)
-    speak(encouragement, () => {
-      timeoutRef.current = setTimeout(() => {
-        setGameState(STATES.READY)
-      }, 500)
-    })
-  }, [])
-
-  // Handle reveal after max attempts
-  const handleReveal = useCallback(() => {
-    setGameState(STATES.REVEAL)
-    speak(`This is ${currentDigit}! ${currentDigit}! Can you say ${currentDigit}?`, () => {
-      timeoutRef.current = setTimeout(() => {
-        speak("Wonderful! Let's try another one!", () => {
-          timeoutRef.current = setTimeout(() => {
-            moveToNext()
-          }, 1000)
-        })
-      }, 2000)
-    })
-  }, [currentDigit])
-
-  // Move to next digit
-  const moveToNext = useCallback(() => {
-    setTranscript('')
-    setAttempts(0)
-
-    if (currentIndex >= totalItems - 1) {
-      setGameState(STATES.COMPLETE)
-      celebrate()
-      speak(`Amazing! You got ${score} out of ${totalItems}! Great job!`)
-    } else {
-      setCurrentIndex(i => i + 1)
-      setGameState(STATES.READY)
-    }
-  }, [currentIndex, score])
+  }, [speechSupported, checkAnswer, handleCorrect, handleWrong, handleReveal])
 
   // Start game
   const startGame = () => {
@@ -369,7 +352,6 @@ function App() {
 
   return (
     <div className="app">
-      {/* Progress indicator */}
       <div className="progress">
         <div className="progress-bar">
           <div
@@ -382,17 +364,14 @@ function App() {
         </div>
       </div>
 
-      {/* Score */}
       <div className="score">
         {'⭐'.repeat(score)}
       </div>
 
-      {/* Main digit display */}
       <div className={`digit-display ${gameState === STATES.CORRECT ? 'celebrating' : ''} ${gameState === STATES.REVEAL ? 'revealing' : ''}`}>
         <span className="digit">{currentDigit}</span>
       </div>
 
-      {/* Feedback area */}
       <div className="feedback">
         {gameState === STATES.LISTENING && (
           <div className="listening-indicator">
@@ -422,7 +401,6 @@ function App() {
         )}
       </div>
 
-      {/* Attempt indicators */}
       <div className="attempts">
         {[...Array(maxAttempts)].map((_, i) => (
           <span
@@ -432,7 +410,6 @@ function App() {
         ))}
       </div>
 
-      {/* Mic button */}
       <button
         className={`mic-button ${gameState === STATES.LISTENING ? 'listening' : ''} ${gameState !== STATES.READY ? 'disabled' : ''}`}
         onClick={handleMicTap}
