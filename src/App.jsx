@@ -111,6 +111,7 @@ function App() {
 
   const recognitionRef = useRef(null)
   const timeoutRef = useRef(null)
+  const handledRef = useRef(false)
 
   const currentDigit = digits[currentIndex]
   const maxAttempts = 3
@@ -174,6 +175,7 @@ function App() {
     recognition.maxAlternatives = 5
 
     recognition.onstart = () => {
+      handledRef.current = false
       setGameState(STATES.LISTENING)
       setTranscript('')
     }
@@ -195,6 +197,10 @@ function App() {
       setTranscript(currentTranscript)
 
       if (finalTranscript && checkAnswer(finalTranscript)) {
+        handledRef.current = true
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+        }
         recognition.abort()
         handleCorrect()
       }
@@ -202,13 +208,13 @@ function App() {
 
     recognition.onerror = (event) => {
       console.log('Speech recognition error:', event.error)
-      if (event.error !== 'aborted') {
+      if (event.error !== 'aborted' && !handledRef.current) {
         setGameState(STATES.READY)
       }
     }
 
     recognition.onend = () => {
-      if (gameState === STATES.LISTENING) {
+      if (!handledRef.current) {
         // Recognition ended without a correct answer
         const newAttempts = attempts + 1
         setAttempts(newAttempts)
@@ -235,7 +241,7 @@ function App() {
         recognitionRef.current.stop()
       }
     }, 4000)
-  }, [speechSupported, gameState, attempts, checkAnswer])
+  }, [speechSupported, attempts, checkAnswer, handleCorrect, handleWrong, handleReveal])
 
   // Handle correct answer
   const handleCorrect = useCallback(() => {
