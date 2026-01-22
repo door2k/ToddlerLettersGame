@@ -192,14 +192,17 @@ function App() {
 
   // Check if transcript matches current digit
   const checkAnswer = useCallback((spokenText) => {
-    const text = spokenText.toLowerCase().trim()
+    // Clean the text: lowercase, remove punctuation, trim
+    const text = spokenText.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
     const digit = digitsRef.current[currentIndexRef.current]
     const validAnswers = numberWords[digit] || []
 
+    // Check each word in the transcript
     const words = text.split(/\s+/)
     for (const word of words) {
       if (validAnswers.includes(word)) return true
     }
+    // Also check full cleaned transcript
     return validAnswers.includes(text)
   }, [])
 
