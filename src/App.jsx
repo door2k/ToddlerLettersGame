@@ -260,7 +260,10 @@ function App() {
 
       console.log('Recognition result:', { final: finalTranscript, interim: interimTranscript, isFinal: !!finalTranscript })
 
-      if (finalTranscript && checkAnswer(finalTranscript)) {
+      // Check both final and interim transcripts for a match
+      // This gives faster feedback and handles cases where speech doesn't finalize properly
+      const transcriptToCheck = finalTranscript || interimTranscript
+      if (transcriptToCheck && checkAnswer(transcriptToCheck)) {
         handledRef.current = true
         if (timeoutRef.current) clearTimeout(timeoutRef.current)
         recognition.abort()
