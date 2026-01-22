@@ -199,18 +199,26 @@ function App() {
 
     console.log('Speech check:', { raw: spokenText, cleaned: text, digit, validAnswers })
 
-    // Check each word in the transcript
-    const words = text.split(/\s+/)
-    for (const word of words) {
-      if (validAnswers.includes(word)) {
-        console.log('MATCH found:', word)
+    // Check if any valid answer appears anywhere in the transcript
+    // This handles repetition like "six six" or "66"
+    for (const answer of validAnswers) {
+      if (text.includes(answer)) {
+        console.log('MATCH found (contains):', answer)
         return true
       }
     }
-    // Also check full cleaned transcript
-    const fullMatch = validAnswers.includes(text)
-    console.log('Full match:', fullMatch)
-    return fullMatch
+
+    // Also check each word individually
+    const words = text.split(/\s+/)
+    for (const word of words) {
+      if (validAnswers.includes(word)) {
+        console.log('MATCH found (word):', word)
+        return true
+      }
+    }
+
+    console.log('No match found')
+    return false
   }, [])
 
   // Start listening for speech
