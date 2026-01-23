@@ -2,35 +2,123 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import confetti from 'canvas-confetti'
 import './App.css'
 
-// Number words mapping for speech recognition
-const numberWords = {
+// English number words mapping for speech recognition
+const englishNumberWords = {
   '0': ['zero', '0', 'oh', 'o'],
   '1': ['one', '1', 'won'],
   '2': ['two', '2', 'too', 'to'],
   '3': ['three', '3', 'tree', 'free'],
   '4': ['four', '4', 'for', 'fore'],
   '5': ['five', '5', 'fife'],
-  '6': ['six', '6', 'sicks', 'sex'],
+  '6': ['six', '6', 'sicks'],
   '7': ['seven', '7'],
   '8': ['eight', '8', 'ate', 'ait'],
   '9': ['nine', '9', 'nein', 'nyne'],
 }
 
-const encouragements = [
-  "Almost! Try again!",
-  "You can do it!",
-  "Give it another try!",
-  "So close! Try once more!",
-]
+// Hebrew number words mapping for speech recognition
+const hebrewNumberWords = {
+  '0': ['אפס', 'efes', 'אֶפֶס'],
+  '1': ['אחת', 'אחד', 'achat', 'echad', 'אַחַת', 'אֶחָד'],
+  '2': ['שתיים', 'שניים', 'shtayim', 'shnayim', 'שְׁתַּיִם', 'שְׁנַיִם'],
+  '3': ['שלוש', 'shalosh', 'שָׁלוֹשׁ'],
+  '4': ['ארבע', 'arba', 'אַרְבַּע'],
+  '5': ['חמש', 'hamesh', 'חָמֵשׁ'],
+  '6': ['שש', 'shesh', 'שֵׁשׁ'],
+  '7': ['שבע', 'sheva', 'שֶׁבַע'],
+  '8': ['שמונה', 'shmone', 'שְׁמוֹנֶה'],
+  '9': ['תשע', 'tesha', 'תֵּשַׁע'],
+}
 
-const celebrations = [
-  "Amazing!",
-  "Wonderful!",
-  "Great job!",
-  "You did it!",
-  "Fantastic!",
-  "Super!",
-]
+// Hebrew number display names (how to say them)
+const hebrewNumberNames = {
+  '0': 'אֶפֶס',
+  '1': 'אַחַת',
+  '2': 'שְׁתַּיִם',
+  '3': 'שָׁלוֹשׁ',
+  '4': 'אַרְבַּע',
+  '5': 'חָמֵשׁ',
+  '6': 'שֵׁשׁ',
+  '7': 'שֶׁבַע',
+  '8': 'שְׁמוֹנֶה',
+  '9': 'תֵּשַׁע',
+}
+
+// Bilingual text strings
+const strings = {
+  en: {
+    title: '🔢 Number Fun!',
+    subtitle: 'Learn to say your numbers!',
+    letsPlay: "Let's Play! 🎉",
+    tapToSpeak: 'Tap to speak',
+    listening: 'Listening...',
+    imListening: "I'm listening...",
+    allDone: '🎉 All Done! 🎉',
+    outOf: 'out of',
+    playAgain: 'Play Again! 🔄',
+    speechNotSupported: 'Sorry, speech recognition is not supported in your browser. Please try Chrome on Android or Safari on iOS.',
+    thisIs: "This is",
+    canYouSay: "Can you say",
+    letsPlayPrompt: "Let's play! What number is this?",
+    letsPlayAgain: "Let's play again! What number is this?",
+    wonderful: "Wonderful! Let's try another one!",
+    amazing: "Amazing! You got",
+    greatJob: "Great job!",
+  },
+  he: {
+    title: '🔢 !משחק מספרים',
+    subtitle: '!בואו נלמד לומר מספרים',
+    letsPlay: '!בואו נשחק 🎉',
+    tapToSpeak: 'לחץ לדבר',
+    listening: '...מקשיב',
+    imListening: '...אני מקשיב',
+    allDone: '🎉 !סיימנו 🎉',
+    outOf: 'מתוך',
+    playAgain: '!שחק שוב 🔄',
+    speechNotSupported: 'מצטערים, זיהוי קולי לא נתמך בדפדפן שלך. נסה Chrome באנדרואיד או Safari באייפון.',
+    thisIs: 'זה המספר',
+    canYouSay: '?אתה יכול להגיד',
+    letsPlayPrompt: '?בואו נשחק! איזה מספר זה',
+    letsPlayAgain: '?בואו נשחק שוב! איזה מספר זה',
+    wonderful: '!מעולה! בואו ננסה עוד אחד',
+    amazing: '!מדהים! קיבלת',
+    greatJob: '!כל הכבוד',
+  }
+}
+
+const encouragements = {
+  en: [
+    "Almost! Try again!",
+    "You can do it!",
+    "Give it another try!",
+    "So close! Try once more!",
+  ],
+  he: [
+    "!כמעט! נסה שוב",
+    "!אתה יכול",
+    "!נסה עוד פעם",
+    "!קרוב! עוד פעם",
+  ]
+}
+
+const celebrations = {
+  en: [
+    "Amazing!",
+    "Wonderful!",
+    "Great job!",
+    "You did it!",
+    "Fantastic!",
+    "Super!",
+  ],
+  he: [
+    "!מדהים",
+    "!מעולה",
+    "!כל הכבוד",
+    "!עשית את זה",
+    "!פנטסטי",
+    "!סופר",
+  ]
+}
 
 // Shuffle array
 function shuffle(array) {
@@ -48,10 +136,11 @@ function randomItem(arr) {
 }
 
 // Speak text using Web Speech API
-function speak(text, onEnd = null) {
+function speak(text, lang = 'en-US', onEnd = null) {
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
+    utterance.lang = lang
     utterance.rate = 0.9
     utterance.pitch = 1.1
     utterance.volume = 1
@@ -97,6 +186,7 @@ function App() {
   const [transcript, setTranscript] = useState('')
   const [hasStarted, setHasStarted] = useState(false)
   const [speechSupported, setSpeechSupported] = useState(true)
+  const [language, setLanguage] = useState('en') // 'en' or 'he'
 
   const recognitionRef = useRef(null)
   const timeoutRef = useRef(null)
@@ -107,16 +197,22 @@ function App() {
   const attemptsRef = useRef(attempts)
   const scoreRef = useRef(score)
   const digitsRef = useRef(digits)
+  const languageRef = useRef(language)
 
   // Keep refs in sync
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
   useEffect(() => { attemptsRef.current = attempts }, [attempts])
   useEffect(() => { scoreRef.current = score }, [score])
   useEffect(() => { digitsRef.current = digits }, [digits])
+  useEffect(() => { languageRef.current = language }, [language])
 
   const currentDigit = digits[currentIndex]
   const maxAttempts = 3
   const totalItems = 10
+  const t = strings[language]
+  const isRTL = language === 'he'
+  const speechLang = language === 'he' ? 'he-IL' : 'en-US'
+  const numberWords = language === 'he' ? hebrewNumberWords : englishNumberWords
 
   // Initialize game
   useEffect(() => {
@@ -134,6 +230,14 @@ function App() {
     }
   }, [])
 
+  // Get display name for digit
+  const getDigitName = useCallback((digit, lang) => {
+    if (lang === 'he') {
+      return hebrewNumberNames[digit] || digit
+    }
+    return digit
+  }, [])
+
   // Move to next digit
   const moveToNext = useCallback(() => {
     setTranscript('')
@@ -142,7 +246,9 @@ function App() {
     if (currentIndexRef.current >= totalItems - 1) {
       setGameState(STATES.COMPLETE)
       celebrate()
-      speak(`Amazing! You got ${scoreRef.current} out of ${totalItems}! Great job!`)
+      const lang = languageRef.current
+      const txt = strings[lang]
+      speak(`${txt.amazing} ${scoreRef.current} ${txt.outOf} ${totalItems}! ${txt.greatJob}`, lang === 'he' ? 'he-IL' : 'en-US')
     } else {
       setCurrentIndex(i => i + 1)
       setGameState(STATES.READY)
@@ -156,8 +262,11 @@ function App() {
     celebrate()
 
     const digit = digitsRef.current[currentIndexRef.current]
-    const celebrationText = randomItem(celebrations)
-    speak(`${celebrationText} That's ${digit}!`, () => {
+    const lang = languageRef.current
+    const celebrationText = randomItem(celebrations[lang])
+    const digitName = lang === 'he' ? hebrewNumberNames[digit] : digit
+
+    speak(`${celebrationText} ${digitName}!`, lang === 'he' ? 'he-IL' : 'en-US', () => {
       timeoutRef.current = setTimeout(() => {
         moveToNext()
       }, 1500)
@@ -167,8 +276,9 @@ function App() {
   // Handle wrong answer
   const handleWrong = useCallback(() => {
     setGameState(STATES.WRONG)
-    const encouragement = randomItem(encouragements)
-    speak(encouragement, () => {
+    const lang = languageRef.current
+    const encouragement = randomItem(encouragements[lang])
+    speak(encouragement, lang === 'he' ? 'he-IL' : 'en-US', () => {
       timeoutRef.current = setTimeout(() => {
         setGameState(STATES.READY)
       }, 500)
@@ -179,9 +289,14 @@ function App() {
   const handleReveal = useCallback(() => {
     setGameState(STATES.REVEAL)
     const digit = digitsRef.current[currentIndexRef.current]
-    speak(`This is ${digit}! ${digit}! Can you say ${digit}?`, () => {
+    const lang = languageRef.current
+    const txt = strings[lang]
+    const digitName = lang === 'he' ? hebrewNumberNames[digit] : digit
+    const speechLanguage = lang === 'he' ? 'he-IL' : 'en-US'
+
+    speak(`${txt.thisIs} ${digitName}! ${digitName}! ${txt.canYouSay} ${digitName}?`, speechLanguage, () => {
       timeoutRef.current = setTimeout(() => {
-        speak("Wonderful! Let's try another one!", () => {
+        speak(txt.wonderful, speechLanguage, () => {
           timeoutRef.current = setTimeout(() => {
             moveToNext()
           }, 1000)
@@ -193,25 +308,26 @@ function App() {
   // Check if transcript matches current digit
   const checkAnswer = useCallback((spokenText) => {
     // Clean the text: lowercase, remove punctuation, trim
-    const text = spokenText.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
+    const text = spokenText.toLowerCase().replace(/[^a-z0-9\u0590-\u05FF\s]/g, '').trim()
     const digit = digitsRef.current[currentIndexRef.current]
-    const validAnswers = numberWords[digit] || []
+    const lang = languageRef.current
+    const words = lang === 'he' ? hebrewNumberWords : englishNumberWords
+    const validAnswers = words[digit] || []
 
-    console.log('Speech check:', { raw: spokenText, cleaned: text, digit, validAnswers })
+    console.log('Speech check:', { raw: spokenText, cleaned: text, digit, validAnswers, lang })
 
-    // Check if any valid answer appears anywhere in the transcript
-    // This handles repetition like "six six" or "66"
+    // Check if any valid answer appears anywhere (handles repetition)
     for (const answer of validAnswers) {
-      if (text.includes(answer)) {
+      if (text.includes(answer.toLowerCase())) {
         console.log('MATCH found (contains):', answer)
         return true
       }
     }
 
     // Also check each word individually
-    const words = text.split(/\s+/)
-    for (const word of words) {
-      if (validAnswers.includes(word)) {
+    const textWords = text.split(/\s+/)
+    for (const word of textWords) {
+      if (validAnswers.map(a => a.toLowerCase()).includes(word)) {
         console.log('MATCH found (word):', word)
         return true
       }
@@ -233,7 +349,7 @@ function App() {
     const recognition = new SpeechRecognition()
     recognition.continuous = false
     recognition.interimResults = true
-    recognition.lang = 'en-US'
+    recognition.lang = languageRef.current === 'he' ? 'he-IL' : 'en-US'
     recognition.maxAlternatives = 5
 
     recognition.onstart = () => {
@@ -261,7 +377,6 @@ function App() {
       console.log('Recognition result:', { final: finalTranscript, interim: interimTranscript, isFinal: !!finalTranscript })
 
       // Check both final and interim transcripts for a match
-      // This gives faster feedback and handles cases where speech doesn't finalize properly
       const transcriptToCheck = finalTranscript || interimTranscript
       if (transcriptToCheck && checkAnswer(transcriptToCheck)) {
         handledRef.current = true
@@ -308,7 +423,7 @@ function App() {
   const startGame = () => {
     setHasStarted(true)
     setGameState(STATES.READY)
-    speak(`Let's play! What number is this?`)
+    speak(t.letsPlayPrompt, speechLang)
   }
 
   // Restart game
@@ -320,7 +435,7 @@ function App() {
     setScore(0)
     setTranscript('')
     setGameState(STATES.READY)
-    speak(`Let's play again! What number is this?`)
+    speak(t.letsPlayAgain, speechLang)
   }
 
   // Handle mic button tap
@@ -330,21 +445,28 @@ function App() {
     }
   }
 
+  // Toggle language
+  const toggleLanguage = () => {
+    setLanguage(l => l === 'en' ? 'he' : 'en')
+  }
+
   // Render start screen
   if (!hasStarted) {
     return (
-      <div className="app">
+      <div className={`app ${isRTL ? 'rtl' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="start-screen">
-          <h1>🔢 Number Fun!</h1>
-          <p>Learn to say your numbers!</p>
+          <button className="lang-toggle" onClick={toggleLanguage}>
+            {language === 'en' ? 'עברית' : 'English'}
+          </button>
+          <h1>{t.title}</h1>
+          <p>{t.subtitle}</p>
           {speechSupported ? (
             <button className="start-button" onClick={startGame}>
-              Let's Play! 🎉
+              {t.letsPlay}
             </button>
           ) : (
             <p className="error">
-              Sorry, speech recognition is not supported in your browser.
-              Please try Chrome on Android or Safari on iOS.
+              {t.speechNotSupported}
             </p>
           )}
         </div>
@@ -355,18 +477,18 @@ function App() {
   // Render completion screen
   if (gameState === STATES.COMPLETE) {
     return (
-      <div className="app">
+      <div className={`app ${isRTL ? 'rtl' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
         <div className="complete-screen">
-          <h1>🎉 All Done! 🎉</h1>
+          <h1>{t.allDone}</h1>
           <div className="final-score">
             <span className="score-number">{score}</span>
-            <span className="score-label">out of {totalItems}</span>
+            <span className="score-label">{t.outOf} {totalItems}</span>
           </div>
           <div className="stars">
             {'⭐'.repeat(Math.min(score, 10))}
           </div>
           <button className="restart-button" onClick={restartGame}>
-            Play Again! 🔄
+            {t.playAgain}
           </button>
         </div>
       </div>
@@ -374,7 +496,11 @@ function App() {
   }
 
   return (
-    <div className="app">
+    <div className={`app ${isRTL ? 'rtl' : ''}`} dir={isRTL ? 'rtl' : 'ltr'}>
+      <button className="lang-toggle-small" onClick={toggleLanguage}>
+        {language === 'en' ? 'עב' : 'EN'}
+      </button>
+
       <div className="progress">
         <div className="progress-bar">
           <div
@@ -393,33 +519,36 @@ function App() {
 
       <div className={`digit-display ${gameState === STATES.CORRECT ? 'celebrating' : ''} ${gameState === STATES.REVEAL ? 'revealing' : ''}`}>
         <span className="digit">{currentDigit}</span>
+        {language === 'he' && currentDigit && (
+          <span className="digit-name-hebrew">{hebrewNumberNames[currentDigit]}</span>
+        )}
       </div>
 
       <div className="feedback">
         {gameState === STATES.LISTENING && (
           <div className="listening-indicator">
             <span className="pulse">🎤</span>
-            <span>I'm listening...</span>
+            <span>{t.imListening}</span>
           </div>
         )}
         {gameState === STATES.CORRECT && (
           <div className="correct-feedback">
-            ✨ {randomItem(celebrations)} ✨
+            ✨ {randomItem(celebrations[language])} ✨
           </div>
         )}
         {gameState === STATES.WRONG && (
           <div className="wrong-feedback">
-            {randomItem(encouragements)}
+            {randomItem(encouragements[language])}
           </div>
         )}
         {gameState === STATES.REVEAL && (
           <div className="reveal-feedback">
-            This is {currentDigit}!
+            {t.thisIs} {language === 'he' ? hebrewNumberNames[currentDigit] : currentDigit}!
           </div>
         )}
         {transcript && gameState === STATES.LISTENING && (
           <div className="transcript">
-            Heard: "{transcript}"
+            {language === 'he' ? `"${transcript}" :שמעתי` : `Heard: "${transcript}"`}
           </div>
         )}
       </div>
@@ -440,7 +569,7 @@ function App() {
       >
         <span className="mic-icon">🎤</span>
         <span className="mic-label">
-          {gameState === STATES.LISTENING ? 'Listening...' : 'Tap to speak'}
+          {gameState === STATES.LISTENING ? t.listening : t.tapToSpeak}
         </span>
       </button>
     </div>
