@@ -1,6 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import confetti from 'canvas-confetti'
 import './App.css'
+import {
+  initializeStats,
+  createLearnerProfile,
+  loadProgress,
+  saveProgress,
+  clearProgress,
+  updateItemStats as updateStats,
+  selectNextItems,
+  getProgressSummary,
+  getItemStatus,
+  ItemStatus,
+} from './adaptiveEngine'
 
 // English number words mapping for speech recognition
 const englishNumberWords = {
@@ -120,16 +132,6 @@ const celebrations = {
   ]
 }
 
-// Shuffle array
-function shuffle(array) {
-  const arr = [...array]
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]]
-  }
-  return arr
-}
-
 // Get random item from array
 function randomItem(arr) {
   return arr[Math.floor(Math.random() * arr.length)]
@@ -178,15 +180,48 @@ const STATES = {
 }
 
 function App() {
-  const [digits, setDigits] = useState([])
+  // Initialize digits lazily based on adaptive learning state
+  const [initialDigits] = useState(() => {
+    const savedProgress = loadProgress()
+    const stats = savedProgress ? savedProgress.itemStats : initializeStats()
+    const profile = savedProgress
+      ? { ...savedProgress.learnerProfile, newItemsIntroducedThisSession: 0 }
+      : createLearnerProfile()
+    return selectNextItems(stats, profile, 10)
+  })
+  const [digits, setDigits] = useState(initialDigits)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [attempts, setAttempts] = useState(0)
   const [gameState, setGameState] = useState(STATES.READY)
   const [score, setScore] = useState(0)
   const [transcript, setTranscript] = useState('')
   const [hasStarted, setHasStarted] = useState(false)
-  const [speechSupported, setSpeechSupported] = useState(true)
+  const [speechSupported] = useState(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    return !!SpeechRecognition
+  })
   const [language, setLanguage] = useState('en') // 'en' or 'he'
+
+  // Adaptive learning state - initialized lazily
+  const [adaptiveState] = useState(() => {
+    const savedProgress = loadProgress()
+    if (savedProgress) {
+      console.log('Loaded saved progress:', getProgressSummary(savedProgress.itemStats))
+      return {
+        itemStats: savedProgress.itemStats,
+        learnerProfile: { ...savedProgress.learnerProfile, newItemsIntroducedThisSession: 0 },
+      }
+    }
+    console.log('Initialized fresh progress')
+    return {
+      itemStats: initializeStats(),
+      learnerProfile: createLearnerProfile(),
+    }
+  })
+  const [itemStats, setItemStats] = useState(adaptiveState.itemStats)
+  const [learnerProfile, setLearnerProfile] = useState(adaptiveState.learnerProfile)
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
+  const [isFirstTry, setIsFirstTry] = useState(true)
 
   const recognitionRef = useRef(null)
   const timeoutRef = useRef(null)
@@ -198,6 +233,9 @@ function App() {
   const scoreRef = useRef(score)
   const digitsRef = useRef(digits)
   const languageRef = useRef(language)
+  const itemStatsRef = useRef(itemStats)
+  const learnerProfileRef = useRef(learnerProfile)
+  const isFirstTryRef = useRef(isFirstTry)
 
   // Keep refs in sync
   useEffect(() => { currentIndexRef.current = currentIndex }, [currentIndex])
@@ -205,6 +243,9 @@ function App() {
   useEffect(() => { scoreRef.current = score }, [score])
   useEffect(() => { digitsRef.current = digits }, [digits])
   useEffect(() => { languageRef.current = language }, [language])
+  useEffect(() => { itemStatsRef.current = itemStats }, [itemStats])
+  useEffect(() => { learnerProfileRef.current = learnerProfile }, [learnerProfile])
+  useEffect(() => { isFirstTryRef.current = isFirstTry }, [isFirstTry])
 
   const currentDigit = digits[currentIndex]
   const maxAttempts = 3
@@ -212,36 +253,46 @@ function App() {
   const t = strings[language]
   const isRTL = language === 'he'
   const speechLang = language === 'he' ? 'he-IL' : 'en-US'
-  const numberWords = language === 'he' ? hebrewNumberWords : englishNumberWords
 
-  // Initialize game
+  // Cleanup on unmount
   useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) {
-      setSpeechSupported(false)
-      return
-    }
-    const allDigits = shuffle(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
-    setDigits(allDigits)
-
+    console.log('Session digits:', digits)
     return () => {
       if (recognitionRef.current) recognitionRef.current.abort()
       if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [])
 
-  // Get display name for digit
-  const getDigitName = useCallback((digit, lang) => {
-    if (lang === 'he') {
-      return hebrewNumberNames[digit] || digit
+  // Update item stats and save progress
+  const updateItemStatsCallback = useCallback((digit, wasCorrect, wasFirstTry) => {
+    setItemStats(prevStats => {
+      if (!prevStats || !prevStats[digit]) return prevStats
+      const updated = updateStats(prevStats[digit], wasCorrect, wasFirstTry)
+      const newStats = { ...prevStats, [digit]: updated }
+      console.log('Updated stats for', digit, ':', updated.status, 'success rate:', Math.round((updated.timesCorrect / updated.timesShown) * 100) + '%')
+      return newStats
+    })
+  }, [])
+
+  // Save progress to localStorage
+  const saveProgressCallback = useCallback(() => {
+    if (itemStatsRef.current && learnerProfileRef.current) {
+      const profile = {
+        ...learnerProfileRef.current,
+        totalSessions: learnerProfileRef.current.totalSessions + 1,
+        lastSessionDate: new Date().toISOString().split('T')[0],
+      }
+      setLearnerProfile(profile)
+      saveProgress(itemStatsRef.current, profile)
+      console.log('Progress saved')
     }
-    return digit
   }, [])
 
   // Move to next digit
   const moveToNext = useCallback(() => {
     setTranscript('')
     setAttempts(0)
+    setIsFirstTry(true) // Reset for next digit
 
     if (currentIndexRef.current >= totalItems - 1) {
       setGameState(STATES.COMPLETE)
@@ -249,11 +300,13 @@ function App() {
       const lang = languageRef.current
       const txt = strings[lang]
       speak(`${txt.amazing} ${scoreRef.current} ${txt.outOf} ${totalItems}! ${txt.greatJob}`, lang === 'he' ? 'he-IL' : 'en-US')
+      // Save progress on session complete
+      saveProgressCallback()
     } else {
       setCurrentIndex(i => i + 1)
       setGameState(STATES.READY)
     }
-  }, [])
+  }, [saveProgressCallback])
 
   // Handle correct answer
   const handleCorrect = useCallback(() => {
@@ -266,16 +319,20 @@ function App() {
     const celebrationText = randomItem(celebrations[lang])
     const digitName = lang === 'he' ? hebrewNumberNames[digit] : digit
 
+    // Update adaptive learning stats - correct answer
+    updateItemStatsCallback(digit, true, isFirstTryRef.current)
+
     speak(`${celebrationText} ${digitName}!`, lang === 'he' ? 'he-IL' : 'en-US', () => {
       timeoutRef.current = setTimeout(() => {
         moveToNext()
       }, 1500)
     })
-  }, [moveToNext])
+  }, [moveToNext, updateItemStatsCallback])
 
   // Handle wrong answer
   const handleWrong = useCallback(() => {
     setGameState(STATES.WRONG)
+    setIsFirstTry(false) // No longer first try after a wrong answer
     const lang = languageRef.current
     const encouragement = randomItem(encouragements[lang])
     speak(encouragement, lang === 'he' ? 'he-IL' : 'en-US', () => {
@@ -294,6 +351,9 @@ function App() {
     const digitName = lang === 'he' ? hebrewNumberNames[digit] : digit
     const speechLanguage = lang === 'he' ? 'he-IL' : 'en-US'
 
+    // Update adaptive learning stats - failed after max attempts
+    updateItemStatsCallback(digit, false, false)
+
     speak(`${txt.thisIs} ${digitName}! ${digitName}! ${txt.canYouSay} ${digitName}?`, speechLanguage, () => {
       timeoutRef.current = setTimeout(() => {
         speak(txt.wonderful, speechLanguage, () => {
@@ -303,7 +363,7 @@ function App() {
         })
       }, 2000)
     })
-  }, [moveToNext])
+  }, [moveToNext, updateItemStatsCallback])
 
   // Check if transcript matches current digit
   const checkAnswer = useCallback((spokenText) => {
@@ -431,14 +491,45 @@ function App() {
 
   // Restart game
   const restartGame = () => {
-    const allDigits = shuffle(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])
-    setDigits(allDigits)
+    // Reset session-specific counter in profile
+    const updatedProfile = {
+      ...learnerProfileRef.current,
+      newItemsIntroducedThisSession: 0,
+    }
+    setLearnerProfile(updatedProfile)
+
+    // Select new items using adaptive algorithm
+    const sessionDigits = selectNextItems(itemStatsRef.current, updatedProfile, totalItems)
+    setDigits(sessionDigits)
+    console.log('New session digits:', sessionDigits)
+
     setCurrentIndex(0)
     setAttempts(0)
     setScore(0)
     setTranscript('')
+    setIsFirstTry(true)
     setGameState(STATES.READY)
     speak(t.letsPlayAgain, speechLang)
+  }
+
+  // Reset all progress
+  const resetProgress = () => {
+    clearProgress()
+    const stats = initializeStats()
+    const profile = createLearnerProfile()
+    setItemStats(stats)
+    setLearnerProfile(profile)
+
+    const sessionDigits = selectNextItems(stats, profile, totalItems)
+    setDigits(sessionDigits)
+    setCurrentIndex(0)
+    setAttempts(0)
+    setScore(0)
+    setTranscript('')
+    setIsFirstTry(true)
+    setHasStarted(false)
+    setShowResetConfirm(false)
+    console.log('Progress reset, starting fresh')
   }
 
   // Handle mic button tap
@@ -453,6 +544,9 @@ function App() {
     setLanguage(l => l === 'en' ? 'he' : 'en')
   }
 
+  // Get progress summary for display
+  const progressSummary = itemStats ? getProgressSummary(itemStats) : null
+
   // Render start screen
   if (!hasStarted) {
     return (
@@ -463,6 +557,18 @@ function App() {
           </button>
           <h1>{t.title}</h1>
           <p>{t.subtitle}</p>
+
+          {progressSummary && progressSummary.mastered > 0 && (
+            <div className="mastery-indicator">
+              <span className="mastery-stars">
+                {'⭐'.repeat(progressSummary.mastered)}
+              </span>
+              <span className="mastery-text">
+                {progressSummary.mastered}/{progressSummary.total} {language === 'he' ? 'נלמדו' : 'mastered'}
+              </span>
+            </div>
+          )}
+
           {speechSupported ? (
             <button className="start-button" onClick={startGame}>
               {t.letsPlay}
@@ -471,6 +577,26 @@ function App() {
             <p className="error">
               {t.speechNotSupported}
             </p>
+          )}
+
+          {progressSummary && progressSummary.mastered > 0 && (
+            <div className="reset-section">
+              {showResetConfirm ? (
+                <div className="reset-confirm">
+                  <span>{language === 'he' ? '?לאפס התקדמות' : 'Reset progress?'}</span>
+                  <button className="reset-yes" onClick={resetProgress}>
+                    {language === 'he' ? 'כן' : 'Yes'}
+                  </button>
+                  <button className="reset-no" onClick={() => setShowResetConfirm(false)}>
+                    {language === 'he' ? 'לא' : 'No'}
+                  </button>
+                </div>
+              ) : (
+                <button className="reset-button" onClick={() => setShowResetConfirm(true)}>
+                  {language === 'he' ? 'התחל מחדש' : 'Reset Progress'}
+                </button>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -490,6 +616,24 @@ function App() {
           <div className="stars">
             {'⭐'.repeat(Math.min(score, 10))}
           </div>
+          {progressSummary && (
+            <div className="session-summary">
+              <div className="summary-item">
+                <span className="summary-label">{language === 'he' ? 'נלמדו' : 'Mastered'}:</span>
+                <span className="summary-value">{progressSummary.mastered}/{progressSummary.total}</span>
+              </div>
+              <div className="summary-item">
+                <span className="summary-label">{language === 'he' ? 'בלימוד' : 'Learning'}:</span>
+                <span className="summary-value">{progressSummary.learning}</span>
+              </div>
+              {progressSummary.newItems < progressSummary.total && (
+                <div className="summary-item">
+                  <span className="summary-label">{language === 'he' ? 'להכיר' : 'To discover'}:</span>
+                  <span className="summary-value">{progressSummary.newItems}</span>
+                </div>
+              )}
+            </div>
+          )}
           <button className="restart-button" onClick={restartGame}>
             {t.playAgain}
           </button>
@@ -524,6 +668,12 @@ function App() {
         <span className="digit">{currentDigit}</span>
         {language === 'he' && currentDigit && (
           <span className="digit-name-hebrew">{hebrewNumberNames[currentDigit]}</span>
+        )}
+        {itemStats && currentDigit && (
+          <span className={`item-status status-${getItemStatus(itemStats, currentDigit)}`}>
+            {getItemStatus(itemStats, currentDigit) === ItemStatus.NEW && '🆕'}
+            {getItemStatus(itemStats, currentDigit) === ItemStatus.MASTERED && '⭐'}
+          </span>
         )}
       </div>
 
