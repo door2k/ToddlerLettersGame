@@ -349,8 +349,11 @@ function App() {
     const recognition = new SpeechRecognition()
     recognition.continuous = false
     recognition.interimResults = true
-    recognition.lang = languageRef.current === 'he' ? 'he-IL' : 'en-US'
+    const recognitionLang = languageRef.current === 'he' ? 'he-IL' : 'en-US'
+    recognition.lang = recognitionLang
     recognition.maxAlternatives = 5
+
+    console.log('Starting recognition with lang:', recognitionLang, 'languageRef:', languageRef.current)
 
     recognition.onstart = () => {
       handledRef.current = false
