@@ -101,12 +101,26 @@ Item States: new → learning → mastered
 
 ## How We Operate
 
+### ⚠️ CRITICAL: Deployment Rules
+
+**NEVER merge to master without explicit approval from Tamir**
+- `master` = PRODUCTION = what kids are using RIGHT NOW
+- Merging to master auto-deploys to Vercel within minutes
+- Always ask: "Ready to deploy X to production?" and wait for YES
+
+**Before any deployment, Claude must:**
+1. Read BRAIN.md first
+2. Confirm which branch is production (master)
+3. Confirm deployment method (Vercel auto-deploy, NOT GitHub Pages)
+4. Get explicit approval for production deploys
+
 ### Development Workflow
 1. **Claude Code** handles implementation on the cloud dev server
 2. Work happens on `next` branch for new features
 3. Test locally with `npm run dev`
 4. Push to `next` branch, verify on Vercel preview
-5. Merge to `master` when ready for production
+5. **GET EXPLICIT APPROVAL** before merging to master
+6. Only then: `git checkout master && git merge next && git push`
 
 ### Communication Style
 - Tamir provides high-level requirements and feedback
@@ -151,4 +165,15 @@ git push origin next  # Deploy to preview
 
 ---
 
-*Last updated: January 23, 2026*
+## Incident Log
+
+### Jan 25, 2026: Accidental Production Deployment
+**What happened:** Claude tried to set up GitHub Pages (wrong - we use Vercel), then merged `next` to `master` without approval, deploying the adaptive learning system to production. This changed game behavior from 10 random digits to starting with only 2-3 digits.
+
+**Resolution:** Reverted master to `a8461c1`, cleaned up next branch to `6fbcae0`, added deployment rules above.
+
+**Lesson:** Always read BRAIN.md first. Never merge to master without explicit approval.
+
+---
+
+*Last updated: January 25, 2026*
