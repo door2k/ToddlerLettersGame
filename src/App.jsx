@@ -362,32 +362,29 @@ function App() {
     const spokenDigit = extractDigitFromTranscript(transcriptRef.current, lang)
 
     if (spokenDigit && spokenDigit !== currentDigitValue) {
-      // Show comparison flow - we recognized a different digit
+      // Show what they said, then redirect to correct answer positively
       setSaidDigit(spokenDigit)
       setComparisonPhase('showing-said')
       setGameState(STATES.COMPARING)
 
-      // Phase 1: Show what they said (1.5s)
+      // Phase 1: Brief flash of what they said (1s) - validates we heard them
       timeoutRef.current = setTimeout(() => {
-        setComparisonPhase('showing-comparison')
+        setComparisonPhase('showing-correct')
 
-        // Phase 2: Show comparison (2s), then speak explanation
-        timeoutRef.current = setTimeout(() => {
-          const saidName = lang === 'he' ? hebrewNumberNames[spokenDigit] : spokenDigit
-          const correctName = lang === 'he' ? hebrewNumberNames[currentDigitValue] : currentDigitValue
-          const explanation = lang === 'he'
-            ? `אמרת ${saidName}, אבל זה ${correctName}!`
-            : `You said ${saidName}, but this is ${correctName}!`
+        // Phase 2: Show correct answer with positive message (2s)
+        const correctName = lang === 'he' ? hebrewNumberNames[currentDigitValue] : currentDigitValue
+        const positiveRedirect = lang === 'he'
+          ? `זה ${correctName}! ${correctName}!`
+          : `This is ${correctName}! ${correctName}!`
 
-          speak(explanation, lang === 'he' ? 'he-IL' : 'en-US', () => {
-            timeoutRef.current = setTimeout(() => {
-              setGameState(STATES.READY)
-              setSaidDigit(null)
-              setComparisonPhase(null)
-            }, 500)
-          })
-        }, 2000)
-      }, 1500)
+        speak(positiveRedirect, lang === 'he' ? 'he-IL' : 'en-US', () => {
+          timeoutRef.current = setTimeout(() => {
+            setGameState(STATES.READY)
+            setSaidDigit(null)
+            setComparisonPhase(null)
+          }, 500)
+        })
+      }, 1000)
     } else {
       // Original flow - couldn't recognize a specific digit
       setGameState(STATES.WRONG)
@@ -761,19 +758,12 @@ function App() {
           <div className="comparison-container">
             {comparisonPhase === 'showing-said' && (
               <div className="said-digit">
-                <span className="label">{language === 'he' ? ':אמרת' : 'You said:'}</span>
-                <span className="digit-shown wrong-digit">{saidDigit}</span>
+                <span className="digit-shown said-digit-display">{saidDigit}</span>
               </div>
             )}
-            {comparisonPhase === 'showing-comparison' && (
-              <div className="comparison">
-                <div className="said-side">
-                  <span className="digit-shown wrong-digit faded">{saidDigit}</span>
-                </div>
-                <span className="not-equal">≠</span>
-                <div className="correct-side">
-                  <span className="digit-shown correct-digit highlighted">{currentDigit}</span>
-                </div>
+            {comparisonPhase === 'showing-correct' && (
+              <div className="correct-reveal">
+                <span className="digit-shown correct-digit highlighted">{currentDigit}</span>
               </div>
             )}
           </div>
