@@ -371,11 +371,11 @@ function App() {
       timeoutRef.current = setTimeout(() => {
         setComparisonPhase('showing-correct')
 
-        // Phase 2: Show correct answer with positive message (2s)
+        // Phase 2: Show correct answer with positive message
         const correctName = lang === 'he' ? hebrewNumberNames[currentDigitValue] : currentDigitValue
         const positiveRedirect = lang === 'he'
-          ? `זה ${correctName}! ${correctName}!`
-          : `This is ${correctName}! ${correctName}!`
+          ? `זה ${correctName}!`
+          : `This is ${correctName}!`
 
         speak(positiveRedirect, lang === 'he' ? 'he-IL' : 'en-US', () => {
           timeoutRef.current = setTimeout(() => {
