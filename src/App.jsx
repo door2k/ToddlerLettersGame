@@ -177,6 +177,21 @@ const STATES = {
   WRONG: 'wrong',
   REVEAL: 'reveal',
   COMPLETE: 'complete',
+  COMPARING: 'comparing', // New state for showing what child said
+}
+
+// Extract digit from spoken transcript
+const extractDigitFromTranscript = (transcript, language) => {
+  if (!transcript) return null
+  const words = language === 'he' ? hebrewNumberWords : englishNumberWords
+  const text = transcript.toLowerCase().trim()
+
+  for (const [digit, validWords] of Object.entries(words)) {
+    if (validWords.some(word => text.includes(word.toLowerCase()))) {
+      return digit
+    }
+  }
+  return null // Couldn't map to a digit
 }
 
 function App() {
@@ -222,10 +237,13 @@ function App() {
   const [learnerProfile, setLearnerProfile] = useState(adaptiveState.learnerProfile)
   const [showResetConfirm, setShowResetConfirm] = useState(false)
   const [isFirstTry, setIsFirstTry] = useState(true)
+  const [saidDigit, setSaidDigit] = useState(null)
+  const [comparisonPhase, setComparisonPhase] = useState(null) // 'showing-said' | 'showing-comparison'
 
   const recognitionRef = useRef(null)
   const timeoutRef = useRef(null)
   const handledRef = useRef(false)
+  const transcriptRef = useRef('')
 
   // Use refs to store current values for use in callbacks
   const currentIndexRef = useRef(currentIndex)
@@ -246,6 +264,7 @@ function App() {
   useEffect(() => { itemStatsRef.current = itemStats }, [itemStats])
   useEffect(() => { learnerProfileRef.current = learnerProfile }, [learnerProfile])
   useEffect(() => { isFirstTryRef.current = isFirstTry }, [isFirstTry])
+  useEffect(() => { transcriptRef.current = transcript }, [transcript])
 
   const currentDigit = digits[currentIndex]
   const maxAttempts = 3
@@ -331,15 +350,50 @@ function App() {
 
   // Handle wrong answer
   const handleWrong = useCallback(() => {
-    setGameState(STATES.WRONG)
     setIsFirstTry(false) // No longer first try after a wrong answer
     const lang = languageRef.current
-    const encouragement = randomItem(encouragements[lang])
-    speak(encouragement, lang === 'he' ? 'he-IL' : 'en-US', () => {
+    const currentDigitValue = digitsRef.current[currentIndexRef.current]
+
+    // Try to extract what digit they said
+    const spokenDigit = extractDigitFromTranscript(transcriptRef.current, lang)
+
+    if (spokenDigit && spokenDigit !== currentDigitValue) {
+      // Show comparison flow - we recognized a different digit
+      setSaidDigit(spokenDigit)
+      setComparisonPhase('showing-said')
+      setGameState(STATES.COMPARING)
+
+      // Phase 1: Show what they said (1.5s)
       timeoutRef.current = setTimeout(() => {
-        setGameState(STATES.READY)
-      }, 500)
-    })
+        setComparisonPhase('showing-comparison')
+
+        // Phase 2: Show comparison (2s), then speak explanation
+        timeoutRef.current = setTimeout(() => {
+          const saidName = lang === 'he' ? hebrewNumberNames[spokenDigit] : spokenDigit
+          const correctName = lang === 'he' ? hebrewNumberNames[currentDigitValue] : currentDigitValue
+          const explanation = lang === 'he'
+            ? `אמרת ${saidName}, אבל זה ${correctName}!`
+            : `You said ${saidName}, but this is ${correctName}!`
+
+          speak(explanation, lang === 'he' ? 'he-IL' : 'en-US', () => {
+            timeoutRef.current = setTimeout(() => {
+              setGameState(STATES.READY)
+              setSaidDigit(null)
+              setComparisonPhase(null)
+            }, 500)
+          })
+        }, 2000)
+      }, 1500)
+    } else {
+      // Original flow - couldn't recognize a specific digit
+      setGameState(STATES.WRONG)
+      const encouragement = randomItem(encouragements[lang])
+      speak(encouragement, lang === 'he' ? 'he-IL' : 'en-US', () => {
+        timeoutRef.current = setTimeout(() => {
+          setGameState(STATES.READY)
+        }, 500)
+      })
+    }
   }, [])
 
   // Handle reveal after max attempts
@@ -697,6 +751,27 @@ function App() {
         {gameState === STATES.REVEAL && (
           <div className="reveal-feedback">
             {t.thisIs} {language === 'he' ? hebrewNumberNames[currentDigit] : currentDigit}!
+          </div>
+        )}
+        {gameState === STATES.COMPARING && (
+          <div className="comparison-container">
+            {comparisonPhase === 'showing-said' && (
+              <div className="said-digit">
+                <span className="label">{language === 'he' ? ':אמרת' : 'You said:'}</span>
+                <span className="digit-shown wrong-digit">{saidDigit}</span>
+              </div>
+            )}
+            {comparisonPhase === 'showing-comparison' && (
+              <div className="comparison">
+                <div className="said-side">
+                  <span className="digit-shown wrong-digit faded">{saidDigit}</span>
+                </div>
+                <span className="not-equal">≠</span>
+                <div className="correct-side">
+                  <span className="digit-shown correct-digit highlighted">{currentDigit}</span>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {transcript && gameState === STATES.LISTENING && (

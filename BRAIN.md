@@ -7,6 +7,7 @@ Educational game where toddlers see a letter/digit, speak its name into the micr
 
 ## URLs
 - **Production**: https://toddler-letters-game.vercel.app (master branch)
+- **Preview**: https://toddler-letters-game-next.vercel.app (next branch)
 - **GitHub**: https://github.com/door2k/ToddlerLettersGame
 
 ## Current State (Jan 2026)
