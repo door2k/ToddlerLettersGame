@@ -185,10 +185,14 @@ const extractDigitFromTranscript = (transcript, language) => {
   if (!transcript) return null
   const words = language === 'he' ? hebrewNumberWords : englishNumberWords
   const text = transcript.toLowerCase().trim()
+  const textWords = text.split(/\s+/)
 
-  for (const [digit, validWords] of Object.entries(words)) {
-    if (validWords.some(word => text.includes(word.toLowerCase()))) {
-      return digit
+  // Check each word in the transcript against valid words for each digit
+  for (const spokenWord of textWords) {
+    for (const [digit, validWords] of Object.entries(words)) {
+      if (validWords.some(word => word.toLowerCase() === spokenWord)) {
+        return digit
+      }
     }
   }
   return null // Couldn't map to a digit
