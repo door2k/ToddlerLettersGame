@@ -178,3 +178,17 @@ git push origin next  # Deploy to preview
 ---
 
 *Last updated: January 25, 2026*
+
+## Notion hub
+
+Tamir shares a Notion workspace with all his Claude instances:
+https://www.notion.so/34837f0083cb81ffa9d4f41dc700950b
+
+Relevant for this project:
+- **Projects DB** (`collection://837f8915-0724-46dc-b24b-166097e2e778`) — find this project's row, update Status / Current Focus / Blockers as they change, and append substantive progress to the page body.
+- **Research & Sourcing** (`collection://dccd3610-587e-4bc6-a324-a235c6085aa4`) — open a row when Tamir asks you to find or compare options.
+- **Appointments** (`collection://207abc29-64ab-40bd-8911-ed3870101707`), **Contacts** (`collection://53adee4e-6642-4da5-83d0-1c3695eb548c`), **Follow-ups** (`collection://e5e59629-8ba0-4443-ba8e-65ae00f50290`) — see hub page for schemas.
+
+Notion MCP tools: `notion-fetch`, `notion-search`, `notion-create-pages`, `notion-update-page`.
+
+API quirks: checkbox values = `"__YES__"` / `"__NO__"`; multi-select = JSON-string array like `"[\"work\",\"friend\"]"`; date fields expand into `date:<Name>:start`, `date:<Name>:end`, `date:<Name>:is_datetime` (1 = datetime, 0 = date-only).
